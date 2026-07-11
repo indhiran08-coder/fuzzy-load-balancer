@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Fuzzy Load Balancer — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" th:href="@{/css/dashboard.css}"/>
+    <meta name="description" content="Intelligent API Load Balancer using Fuzzy Logic — Real-time monitoring dashboard"/>
+</head>
+<body>
+
+<!-- ============================================================
+     SIDEBAR NAVIGATION
+     ============================================================ -->
+<nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="logo">
+            <span class="logo-icon">⚡</span>
+            <div class="logo-text">
+                <span class="logo-title">FuzzyLB</span>
+                <span class="logo-subtitle">Load Balancer</span>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav-links">
+        <li class="nav-item active">
+            <a href="/" class="nav-link">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Dashboard</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="/servers" class="nav-link">
+                <span class="nav-icon">🖥️</span>
+                <span class="nav-text">Servers</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="/simulation" class="nav-link">
+                <span class="nav-icon">🔄</span>
+                <span class="nav-text">Simulation</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="/monitoring" class="nav-link">
+                <span class="nav-icon">📋</span>
+                <span class="nav-text">Monitoring</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="/swagger-ui.html" class="nav-link" target="_blank">
+                <span class="nav-icon">📖</span>
+                <span class="nav-text">API Docs</span>
+            </a>
+        </li>
+    </ul>
+
+    <div class="sidebar-footer">
+        <div class="user-info">
+            <span class="user-avatar">👤</span>
+            <div>
+                <span class="user-name" th:text="${#authentication != null ? #authentication.name : 'Guest'}">User</span>
+                <span class="user-role">Administrator</span>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- ============================================================
+     MAIN CONTENT
+     ============================================================ -->
+<main class="main-content">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <h1 class="page-title">Dashboard</h1>
+            <span class="page-subtitle">Real-time load balancer monitoring</span>
+        </div>
+        <div class="topbar-right">
+            <div class="status-badge" id="sim-status-badge">
+                <span class="status-dot" id="sim-dot"></span>
+                <span id="sim-status-text">Checking...</span>
+            </div>
+            <button class="btn btn-primary" id="route-btn" onclick="routeRequest()">
+                ⚡ Route Request
+            </button>
+        </div>
+    </header>
+
+    <!-- ============================================================
+         KPI CARDS ROW
+         ============================================================ -->
+    <section class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card" id="kpi-total-requests">
+            <div class="kpi-icon" style="background: linear-gradient(135deg,#6c63ff,#3f3d56)">📨</div>
+            <div class="kpi-body">
+                <span class="kpi-label">Total Requests</span>
+                <span class="kpi-value" id="kpi-total">—</span>
+            </div>
+        </div>
+        <div class="kpi-card" id="kpi-avg-score">
+            <div class="kpi-icon" style="background: linear-gradient(135deg,#43e97b,#38f9d7)">🧠</div>
+            <div class="kpi-body">
+                <span class="kpi-label">Avg Fuzzy Score</span>
+                <span class="kpi-value" id="kpi-score">—</span>
+            </div>
+        </div>
+        <div class="kpi-card" id="kpi-avg-rt">
+            <div class="kpi-icon" style="background: linear-gradient(135deg,#f093fb,#f5576c)">⚡</div>
+            <div class="kpi-body">
+                <span class="kpi-label">Avg Response Time</span>
+                <span class="kpi-value" id="kpi-rt">—</span>
+            </div>
+        </div>
+        <div class="kpi-card" id="kpi-healthy">
+            <div class="kpi-icon" style="background: linear-gradient(135deg,#4facfe,#00f2fe)">✅</div>
+            <div class="kpi-body">
+                <span class="kpi-label">Healthy Servers</span>
+                <span class="kpi-value" id="kpi-healthy-count">—</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================================
+         SERVER CARDS ROW
+         ============================================================ -->
+    <section class="section">
+        <div class="section-header">
+            <h2 class="section-title">Server Status</h2>
+            <div class="section-actions">
+                <button class="btn btn-sm btn-secondary" onclick="refreshServers()">↻ Refresh</button>
+                <button class="btn btn-sm btn-warning" onclick="triggerStress()">⚠ Stress Test</button>
+                <button class="btn btn-sm btn-success" onclick="resetMetrics()">↺ Reset</button>
+            </div>
+        </div>
+        <div class="server-grid" id="server-grid">
+            <div class="loading-spinner">Loading servers...</div>
+        </div>
+    </section>
+
+    <!-- ============================================================
+         FUZZY EVALUATION & LOAD DISTRIBUTION
+         ============================================================ -->
+    <div class="two-col-grid">
+
+        <!-- Fuzzy Evaluation Panel -->
+        <section class="section">
+            <div class="section-header">
+                <h2 class="section-title">🧠 Live Fuzzy Scores</h2>
+                <button class="btn btn-sm btn-primary" onclick="evaluateServers()">Evaluate</button>
+            </div>
+            <div id="fuzzy-scores" class="fuzzy-panel">
+                <p class="empty-state">Click "Evaluate" to run the fuzzy engine</p>
+            </div>
+        </section>
+
+        <!-- Load Distribution Panel -->
+        <section class="section">
+            <div class="section-header">
+                <h2 class="section-title">📊 Load Distribution</h2>
+            </div>
+            <div id="distribution-panel" class="distribution-panel">
+                <div class="loading-spinner">Loading...</div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- ============================================================
+         LAST ROUTING DECISION
+         ============================================================ -->
+    <section class="section" id="last-decision-section" style="display:none">
+        <div class="section-header">
+            <h2 class="section-title">⚡ Last Routing Decision</h2>
+        </div>
+        <div id="last-decision" class="decision-panel"></div>
+    </section>
+
+    <!-- ============================================================
+         SIMULATION CONTROLS
+         ============================================================ -->
+    <section class="section">
+        <div class="section-header">
+            <h2 class="section-title">🔄 Simulation Controls</h2>
+        </div>
+        <div class="sim-controls">
+            <button class="btn btn-success btn-lg" onclick="startSim()">▶ Start Simulation</button>
+            <button class="btn btn-danger btn-lg" onclick="stopSim()">⏹ Stop Simulation</button>
+            <button class="btn btn-warning btn-lg" onclick="triggerTick()">⚡ Manual Tick</button>
+        </div>
+        <div id="sim-message" class="sim-message" style="display:none"></div>
+    </section>
+
+</main>
+
+<!-- ============================================================
+     TOAST NOTIFICATIONS
+     ============================================================ -->
+<div id="toast-container" class="toast-container"></div>
+
+<script th:src="@{/js/dashboard.js}"></script>
+</body>
+</html>

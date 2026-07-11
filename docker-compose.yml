@@ -1,0 +1,89 @@
+# =============================================================================
+# docker-compose.yml — Fuzzy Load Balancer Full Stack
+#
+# Services:
+#   mysql    — MySQL 8.0 database
+#   app      — Spring Boot application (depends on mysql)
+#
+# Usage:
+#   Start:   docker-compose up -d
+#   Stop:    docker-compose down
+#   Logs:    docker-compose logs -f app
+#   Rebuild: docker-compose up -d --build
+#
+# After startup:
+#   Dashboard:   http://localhost:8080
+#   Swagger UI:  http://localhost:8080/swagger-ui.html
+#   MySQL:       localhost:3306  (user: fuzzy, pass: fuzzy123)
+# =============================================================================
+
+version: '3.9'
+
+services:
+
+  # ─── MySQL Database ──────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: fuzzy-lb-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: fuzzy_lb_db
+      MYSQL_USER: fuzzy
+      MYSQL_PASSWORD: fuzzy123
+    ports:
+      - "3306:3306"           # Expose for external tools (DBeaver, MySQL Workbench)
+    volumes:
+      - mysql_data:/var/lib/mysql    # Persist data across restarts
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql   # Optional init script
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "fuzzy", "-pfuzzy123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - fuzzy-net
+
+  # ─── Spring Boot Application ─────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fuzzy-lb-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Override application.properties values via environment variables
+      # Spring Boot automatically maps SPRING_DATASOURCE_URL → spring.datasource.url
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/fuzzy_lb_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: fuzzy
+      SPRING_DATASOURCE_PASSWORD: fuzzy123
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      APP_JWT_SECRET: ${JWT_SECRET:-ChangeThisToAVeryLongAndSecureSecretKeyInProduction2024}
+      APP_JWT_EXPIRATION: 86400000
+      APP_SIMULATION_AUTO_START: "true"
+      APP_SIMULATION_INTERVAL_MS: "5000"
+      LOGGING_LEVEL_COM_FUZZYBALANCER: INFO
+    depends_on:
+      mysql:
+        condition: service_healthy   # Wait for MySQL health check to pass
+    networks:
+      - fuzzy-net
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  fuzzy-net:
+    driver: bridge
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  mysql_data:
+    driver: local
