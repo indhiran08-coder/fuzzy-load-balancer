@@ -5,11 +5,13 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.fuzzybalancer.fuzzy.rules.FuzzyRule.CpuSet.*;
-import static com.fuzzybalancer.fuzzy.rules.FuzzyRule.PrioritySet.*;
-import static com.fuzzybalancer.fuzzy.rules.FuzzyRule.RamSet.*;
-import static com.fuzzybalancer.fuzzy.rules.FuzzyRule.RequestsSet.*;
 import static com.fuzzybalancer.fuzzy.rules.FuzzyRule.ResponseSet.*;
+import static com.fuzzybalancer.fuzzy.rules.FuzzyRule.PrioritySet.VERY_HIGH;
+import static com.fuzzybalancer.fuzzy.rules.FuzzyRule.PrioritySet.VERY_LOW;
+import com.fuzzybalancer.fuzzy.rules.FuzzyRule.CpuSet;
+import com.fuzzybalancer.fuzzy.rules.FuzzyRule.RamSet;
+import com.fuzzybalancer.fuzzy.rules.FuzzyRule.RequestsSet;
+import com.fuzzybalancer.fuzzy.rules.FuzzyRule.PrioritySet;
 
 /**
  * FuzzyRuleBase — The complete rule base for the load balancer fuzzy system.
@@ -69,7 +71,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(1)
             .description("Idle server with minimal load and fast response → route here first")
-            .cpuCondition(LOW).ramCondition(LOW).requestsCondition(LOW).responseCondition(FAST)
+            .cpuCondition(CpuSet.LOW).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.LOW).responseCondition(FAST)
             .priorityOutput(VERY_HIGH).build());
 
         /*
@@ -80,7 +82,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(2)
             .description("Low CPU, medium RAM, few requests, fast response → excellent candidate")
-            .cpuCondition(LOW).ramCondition(MEDIUM).requestsCondition(LOW).responseCondition(FAST)
+            .cpuCondition(CpuSet.LOW).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.LOW).responseCondition(FAST)
             .priorityOutput(VERY_HIGH).build());
 
         /*
@@ -91,7 +93,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(3)
             .description("Low CPU and RAM, moderate requests, fast response → strong candidate")
-            .cpuCondition(LOW).ramCondition(LOW).requestsCondition(MEDIUM).responseCondition(FAST)
+            .cpuCondition(CpuSet.LOW).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.MEDIUM).responseCondition(FAST)
             .priorityOutput(VERY_HIGH).build());
 
         /*
@@ -102,7 +104,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(4)
             .description("Moderate CPU, low RAM, low requests, fast response → very good candidate")
-            .cpuCondition(MEDIUM).ramCondition(LOW).requestsCondition(LOW).responseCondition(FAST)
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.LOW).responseCondition(FAST)
             .priorityOutput(VERY_HIGH).build());
 
         /*
@@ -113,8 +115,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(5)
             .description("All metrics low, normal response → high quality candidate")
-            .cpuCondition(LOW).ramCondition(LOW).requestsCondition(LOW).responseCondition(NORMAL)
-            .priorityOutput(HIGH).build());
+            .cpuCondition(CpuSet.LOW).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.LOW).responseCondition(NORMAL)
+            .priorityOutput(PrioritySet.HIGH).build());
 
         // =============================================================
         // CATEGORY 2: GOOD CONDITIONS → HIGH PRIORITY (Rules 6–10)
@@ -129,8 +131,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(6)
             .description("Medium CPU and RAM, moderate requests, fast response → good choice")
-            .cpuCondition(MEDIUM).ramCondition(MEDIUM).requestsCondition(MEDIUM).responseCondition(FAST)
-            .priorityOutput(HIGH).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.MEDIUM).responseCondition(FAST)
+            .priorityOutput(PrioritySet.HIGH).build());
 
         /*
          * Rule 7 — Low CPU with moderate RAM and requests
@@ -140,8 +142,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(7)
             .description("Low CPU, medium RAM, medium requests, normal response → good candidate")
-            .cpuCondition(LOW).ramCondition(MEDIUM).requestsCondition(MEDIUM).responseCondition(NORMAL)
-            .priorityOutput(HIGH).build());
+            .cpuCondition(CpuSet.LOW).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.MEDIUM).responseCondition(NORMAL)
+            .priorityOutput(PrioritySet.HIGH).build());
 
         /*
          * Rule 8 — Moderate load across all metrics
@@ -151,8 +153,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(8)
             .description("Low CPU, low RAM, high requests, fast response → still a good choice")
-            .cpuCondition(LOW).ramCondition(LOW).requestsCondition(HIGH).responseCondition(FAST)
-            .priorityOutput(HIGH).build());
+            .cpuCondition(CpuSet.LOW).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.HIGH).responseCondition(FAST)
+            .priorityOutput(PrioritySet.HIGH).build());
 
         /*
          * Rule 9 — Medium CPU, low RAM, normal response
@@ -162,8 +164,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(9)
             .description("Medium CPU, low RAM, low requests, normal response → above average")
-            .cpuCondition(MEDIUM).ramCondition(LOW).requestsCondition(LOW).responseCondition(NORMAL)
-            .priorityOutput(HIGH).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.LOW).responseCondition(NORMAL)
+            .priorityOutput(PrioritySet.HIGH).build());
 
         /*
          * Rule 10 — Low CPU, medium everything, normal response
@@ -171,8 +173,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(10)
             .description("Low CPU, medium RAM, medium requests, normal response → preferred")
-            .cpuCondition(LOW).ramCondition(MEDIUM).requestsCondition(MEDIUM).responseCondition(FAST)
-            .priorityOutput(HIGH).build());
+            .cpuCondition(CpuSet.LOW).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.MEDIUM).responseCondition(FAST)
+            .priorityOutput(PrioritySet.HIGH).build());
 
         // =============================================================
         // CATEGORY 3: AVERAGE CONDITIONS → MEDIUM PRIORITY (Rules 11–16)
@@ -187,8 +189,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(11)
             .description("All metrics medium, normal response → average server, acceptable choice")
-            .cpuCondition(MEDIUM).ramCondition(MEDIUM).requestsCondition(MEDIUM).responseCondition(NORMAL)
-            .priorityOutput(MEDIUM).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.MEDIUM).responseCondition(NORMAL)
+            .priorityOutput(PrioritySet.MEDIUM).build());
 
         /*
          * Rule 12 — High CPU but everything else is fine
@@ -198,8 +200,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(12)
             .description("High CPU but low RAM and low requests → use with caution")
-            .cpuCondition(HIGH).ramCondition(LOW).requestsCondition(LOW).responseCondition(FAST)
-            .priorityOutput(MEDIUM).build());
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.LOW).responseCondition(FAST)
+            .priorityOutput(PrioritySet.MEDIUM).build());
 
         /*
          * Rule 13 — Moderate load, slow response beginning
@@ -209,8 +211,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(13)
             .description("Medium metrics but slowing response → still usable, monitor closely")
-            .cpuCondition(MEDIUM).ramCondition(MEDIUM).requestsCondition(LOW).responseCondition(SLOW)
-            .priorityOutput(MEDIUM).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.LOW).responseCondition(SLOW)
+            .priorityOutput(PrioritySet.MEDIUM).build());
 
         /*
          * Rule 14 — Low requests but high resource usage
@@ -220,8 +222,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(14)
             .description("High CPU and RAM but low requests and fast response → background work suspected")
-            .cpuCondition(HIGH).ramCondition(HIGH).requestsCondition(LOW).responseCondition(FAST)
-            .priorityOutput(MEDIUM).build());
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.LOW).responseCondition(FAST)
+            .priorityOutput(PrioritySet.MEDIUM).build());
 
         /*
          * Rule 15 — Medium everything, slow response
@@ -231,8 +233,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(15)
             .description("Medium CPU, high RAM, medium requests, normal response → below average")
-            .cpuCondition(MEDIUM).ramCondition(HIGH).requestsCondition(MEDIUM).responseCondition(NORMAL)
-            .priorityOutput(MEDIUM).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.MEDIUM).responseCondition(NORMAL)
+            .priorityOutput(PrioritySet.MEDIUM).build());
 
         /*
          * Rule 16 — High requests, medium resources, fast response
@@ -242,8 +244,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(16)
             .description("Medium CPU, medium RAM, high requests, fast response → under pressure but coping")
-            .cpuCondition(MEDIUM).ramCondition(MEDIUM).requestsCondition(HIGH).responseCondition(FAST)
-            .priorityOutput(MEDIUM).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.HIGH).responseCondition(FAST)
+            .priorityOutput(PrioritySet.MEDIUM).build());
 
         // =============================================================
         // CATEGORY 4: POOR CONDITIONS → LOW PRIORITY (Rules 17–21)
@@ -258,8 +260,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(17)
             .description("High CPU, medium RAM, high requests, slow response → avoid if possible")
-            .cpuCondition(HIGH).ramCondition(MEDIUM).requestsCondition(HIGH).responseCondition(SLOW)
-            .priorityOutput(LOW).build());
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.HIGH).responseCondition(SLOW)
+            .priorityOutput(PrioritySet.LOW).build());
 
         /*
          * Rule 18 — RAM pressure with slow response
@@ -269,8 +271,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(18)
             .description("Medium CPU, high RAM, medium requests, slow response → memory pressure")
-            .cpuCondition(MEDIUM).ramCondition(HIGH).requestsCondition(MEDIUM).responseCondition(SLOW)
-            .priorityOutput(LOW).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.MEDIUM).responseCondition(SLOW)
+            .priorityOutput(PrioritySet.LOW).build());
 
         /*
          * Rule 19 — All resources high, normal response barely holding
@@ -280,8 +282,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(19)
             .description("High CPU, high RAM, high requests, normal response → at capacity limit")
-            .cpuCondition(HIGH).ramCondition(HIGH).requestsCondition(HIGH).responseCondition(NORMAL)
-            .priorityOutput(LOW).build());
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.HIGH).responseCondition(NORMAL)
+            .priorityOutput(PrioritySet.LOW).build());
 
         /*
          * Rule 20 — High CPU and RAM, moderate requests, slow
@@ -289,8 +291,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(20)
             .description("High CPU, high RAM, low requests, slow response → resource-starved")
-            .cpuCondition(HIGH).ramCondition(HIGH).requestsCondition(LOW).responseCondition(SLOW)
-            .priorityOutput(LOW).build());
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.LOW).responseCondition(SLOW)
+            .priorityOutput(PrioritySet.LOW).build());
 
         /*
          * Rule 21 — Medium CPU, high everything else, slow response
@@ -298,8 +300,8 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(21)
             .description("Medium CPU, high RAM, high requests, slow response → avoid")
-            .cpuCondition(MEDIUM).ramCondition(HIGH).requestsCondition(HIGH).responseCondition(SLOW)
-            .priorityOutput(LOW).build());
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.HIGH).responseCondition(SLOW)
+            .priorityOutput(PrioritySet.LOW).build());
 
         // =============================================================
         // CATEGORY 5: CRITICAL CONDITIONS → VERY LOW PRIORITY (Rules 22–25)
@@ -315,7 +317,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(22)
             .description("All metrics HIGH and slow response → CRITICAL: do not route here")
-            .cpuCondition(HIGH).ramCondition(HIGH).requestsCondition(HIGH).responseCondition(SLOW)
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.HIGH).responseCondition(SLOW)
             .priorityOutput(VERY_LOW).build());
 
         /*
@@ -326,7 +328,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(23)
             .description("High CPU, high requests, slow response → CPU-bound server, avoid")
-            .cpuCondition(HIGH).ramCondition(MEDIUM).requestsCondition(HIGH).responseCondition(SLOW)
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.MEDIUM).requestsCondition(RequestsSet.HIGH).responseCondition(SLOW)
             .priorityOutput(VERY_LOW).build());
 
         /*
@@ -337,7 +339,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(24)
             .description("High RAM, high requests, slow response → memory-bound critical state")
-            .cpuCondition(MEDIUM).ramCondition(HIGH).requestsCondition(HIGH).responseCondition(SLOW)
+            .cpuCondition(CpuSet.MEDIUM).ramCondition(RamSet.HIGH).requestsCondition(RequestsSet.HIGH).responseCondition(SLOW)
             .priorityOutput(VERY_LOW).build());
 
         /*
@@ -348,7 +350,7 @@ public class FuzzyRuleBase {
         rules.add(FuzzyRule.builder()
             .ruleId(25)
             .description("High CPU and requests, slow response → severely overloaded")
-            .cpuCondition(HIGH).ramCondition(LOW).requestsCondition(HIGH).responseCondition(SLOW)
+            .cpuCondition(CpuSet.HIGH).ramCondition(RamSet.LOW).requestsCondition(RequestsSet.HIGH).responseCondition(SLOW)
             .priorityOutput(VERY_LOW).build());
     }
 

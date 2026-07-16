@@ -96,6 +96,9 @@ public class SecurityConfig {
                     "/actuator/health",      // Health check
                     "/actuator/info",
                     "/",                     // Dashboard home
+                    "/servers",             // Server management page
+                    "/simulation",          // Simulation page
+                    "/monitoring",          // Monitoring/logs page
                     "/login",               // Thymeleaf login page
                     "/register",            // Thymeleaf register page
                     "/css/**",              // Static CSS

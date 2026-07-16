@@ -18,13 +18,20 @@ const API_BASE = '';          // Same origin — Spring Boot serves both
 const POLL_INTERVAL_MS = 5000; // Refresh server cards every 5 seconds
 let pollingTimer = null;
 let jwtToken = localStorage.getItem('jwt_token') || null;
+let currentView = 'dashboard';  // Tracks which view is active
 
 // =============================================================================
 // STARTUP
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadDashboard();
+    // Detect which view to show based on URL path
+    const path = window.location.pathname;
+    if (path.includes('servers'))    showView('servers');
+    else if (path.includes('simulation')) showView('simulation');
+    else if (path.includes('monitoring')) showView('monitoring');
+    else                             showView('dashboard');
+
     startPolling();
     updateSimStatus();
 });
@@ -41,14 +48,21 @@ async function loadDashboard() {
 }
 
 /**
- * startPolling() — Refreshes server cards and KPIs automatically.
- * Uses setInterval so the data stays fresh even if simulation is running.
+ * startPolling() — Refreshes data automatically every 5s.
+ * Only polls data relevant to the currently active view.
  */
 function startPolling() {
     if (pollingTimer) clearInterval(pollingTimer);
     pollingTimer = setInterval(async () => {
-        await Promise.all([loadKpis(), loadServers(), loadDistribution()]);
-        updateSimStatus();
+        if (currentView === 'dashboard') {
+            await Promise.all([loadKpis(), loadServers(), loadDistribution()]);
+            updateSimStatus();
+        } else if (currentView === 'servers') {
+            await loadServerTable();
+        } else if (currentView === 'simulation') {
+            await loadSimulationStatus();
+        }
+        // monitoring logs are not auto-polled (user refreshes manually)
     }, POLL_INTERVAL_MS);
 }
 
@@ -170,25 +184,35 @@ async function refreshServers() { await loadServers(); showToast('Servers refres
 async function loadDistribution() {
     const data = await apiFetch('/api/dashboard/distribution');
     const panel = document.getElementById('distribution-panel');
-    if (!data?.data || Object.keys(data.data).length === 0) {
-        panel.innerHTML = '<p class="empty-state">No routing decisions yet. Route a request first.</p>';
+    if (!data?.data) {
+        panel.innerHTML = '<p class="empty-state">No servers registered yet.</p>';
         return;
     }
 
     const dist = data.data;
-    const colors = ['#6c63ff', '#38f9d7', '#f5576c', '#43e97b', '#fa8231'];
+    // Show all servers — including those with 0 decisions
+    if (Object.keys(dist).length === 0) {
+        panel.innerHTML = '<p class="empty-state">No servers registered yet.</p>';
+        return;
+    }
+
+    const colors = ['#6c63ff', '#38f9d7', '#f5576c', '#43e97b', '#fa8231', '#4facfe'];
     let i = 0;
-    panel.innerHTML = Object.entries(dist).map(([name, info]) => `
+    panel.innerHTML = Object.entries(dist).map(([name, info]) => {
+        const pct = info.percentage || 0;
+        const count = info.count || 0;
+        const color = colors[i++ % colors.length];
+        return `
         <div class="dist-row">
             <div class="dist-header">
                 <span>${escHtml(name)}</span>
-                <span>${info.percentage || 0}% (${info.count || 0} reqs)</span>
+                <span>${pct}% (${count} reqs)</span>
             </div>
             <div class="dist-bar">
-                <div class="dist-fill" style="width:${info.percentage || 0}%; background:${colors[i++ % colors.length]}"></div>
+                <div class="dist-fill" style="width:${Math.max(pct, pct > 0 ? 1 : 0)}%; background:${color}; min-width:${count > 0 ? '4px' : '0'}"></div>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 // =============================================================================
@@ -306,13 +330,16 @@ async function triggerStress() {
     showToast('Stress test applied! Watch fuzzy scores change.', 'info');
     await loadServers();
     await evaluateServers();
+    // Also refresh KPIs and distribution immediately
+    await Promise.all([loadKpis(), loadDistribution()]);
 }
 
 async function resetMetrics() {
     const data = await apiFetch('/api/simulation/reset', { method: 'POST' });
     showMessage(data?.data || 'Metrics reset');
     showToast('Metrics reset to baseline', 'success');
-    await loadServers();
+    // Refresh all dashboard data immediately
+    await Promise.all([loadServers(), loadKpis(), loadDistribution()]);
 }
 
 async function updateSimStatus() {
@@ -420,4 +447,260 @@ function escHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+// =============================================================================
+// VIEW NAVIGATION (SPA-style switching)
+// =============================================================================
+
+const viewTitles = {
+    dashboard:  ['Dashboard',  'Real-time load balancer monitoring'],
+    servers:    ['Servers',    'Manage and monitor backend servers'],
+    simulation: ['Simulation', 'Control load simulation and stress tests'],
+    monitoring: ['Monitoring', 'Routing decisions and request logs'],
+};
+
+function showView(viewName) {
+    currentView = viewName;  // Track active view for polling
+
+    // Hide all views
+    document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+    // Show target view
+    const el = document.getElementById('view-' + viewName);
+    if (el) el.classList.add('active');
+
+    // Update sidebar active state
+    document.querySelectorAll('.nav-item').forEach(li => li.classList.remove('active'));
+    const navEl = document.getElementById('nav-' + viewName);
+    if (navEl) navEl.classList.add('active');
+
+    // Update page title
+    const [title, sub] = viewTitles[viewName] || ['Dashboard', ''];
+    document.getElementById('page-title').textContent = title;
+    document.getElementById('page-subtitle').textContent = sub;
+
+    // Update browser URL without page reload
+    history.pushState({}, '', '/' + (viewName === 'dashboard' ? '' : viewName));
+
+    // Load data for the view
+    if (viewName === 'dashboard') loadDashboard();
+    else if (viewName === 'servers') loadServerTable();
+    else if (viewName === 'simulation') loadSimulationStatus();
+    else if (viewName === 'monitoring') loadDecisionLogs(0);
+}
+
+// =============================================================================
+// SERVERS VIEW — Full Server Management Table
+// =============================================================================
+
+async function loadServerTable() {
+    const wrap = document.getElementById('server-table-wrap');
+    wrap.innerHTML = '<div class="loading-spinner">Loading servers...</div>';
+
+    const data = await apiFetch('/api/servers?size=50&sort=name');
+    if (!data?.data?.content || data.data.content.length === 0) {
+        wrap.innerHTML = '<p class="empty-state">No servers registered yet. Add one below!</p>';
+        return;
+    }
+
+    const servers = data.data.content;
+    wrap.innerHTML = `
+        <table class="mgmt-table">
+            <thead>
+                <tr>
+                    <th>Name</th><th>Address</th><th>Health</th>
+                    <th>CPU</th><th>RAM</th><th>Active Req</th>
+                    <th>Resp Time</th><th>Total Served</th><th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${servers.map(s => `
+                <tr>
+                    <td><strong>${escHtml(s.name)}</strong></td>
+                    <td style="color:#8892a4">${escHtml(s.address)}:${s.port}</td>
+                    <td><span class="badge-${(s.healthStatus||'offline').toLowerCase()}">${s.healthStatus}</span></td>
+                    <td>${(s.cpuUsage||0).toFixed(1)}%</td>
+                    <td>${(s.ramUsage||0).toFixed(1)}%</td>
+                    <td>${s.activeRequests||0}</td>
+                    <td>${(s.responseTime||0).toFixed(0)}ms</td>
+                    <td>${s.totalRequestsServed||0}</td>
+                    <td><button class="delete-btn" onclick="deleteServer(${s.id}, '${escHtml(s.name)}')">🗑 Delete</button></td>
+                </tr>`).join('')}
+            </tbody>
+        </table>`;
+}
+
+async function addServer() {
+    const name    = document.getElementById('srv-name').value.trim();
+    const address = document.getElementById('srv-address').value.trim();
+    const port    = parseInt(document.getElementById('srv-port').value);
+    const desc    = document.getElementById('srv-desc').value.trim();
+
+    if (!name || !address || !port) {
+        showToast('Name, address and port are required!', 'error');
+        return;
+    }
+
+    const data = await apiFetch('/api/servers', {
+        method: 'POST',
+        body: JSON.stringify({ name, address, port, description: desc })
+    });
+
+    if (data?.data) {
+        showToast(`Server "${name}" registered! Dashboard updated.`, 'success');
+        clearServerForm();
+        // Refresh servers table AND push update to dashboard data
+        await Promise.all([
+            loadServerTable(),
+            loadKpis(),
+            loadDistribution(),
+            loadServers()
+        ]);
+    } else {
+        showToast('Failed to register server', 'error');
+    }
+}
+
+async function deleteServer(id, name) {
+    if (!confirm(`Delete server "${name}"? This cannot be undone.`)) return;
+    const data = await apiFetch(`/api/servers/${id}`, { method: 'DELETE' });
+    if (data !== null) {
+        showToast(`Server "${name}" deleted`, 'info');
+        // Refresh servers table AND push update to dashboard data
+        await Promise.all([
+            loadServerTable(),
+            loadKpis(),
+            loadDistribution(),
+            loadServers()
+        ]);
+    } else {
+        showToast('Failed to delete server', 'error');
+    }
+}
+
+function clearServerForm() {
+    ['srv-name','srv-address','srv-desc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('srv-port').value = '8080';
+}
+
+async function refreshServerTable() {
+    await loadServerTable();
+    showToast('Server list refreshed', 'info');
+}
+
+// =============================================================================
+// SIMULATION VIEW — Full Status Panel
+// =============================================================================
+
+async function loadSimulationStatus() {
+    const data = await apiFetch('/api/simulation/status');
+    const el = document.getElementById('sim-full-status');
+    if (!data?.data) { el.textContent = 'Could not fetch simulation status.'; return; }
+    const r = data.data;
+    const running = r.running;
+    el.innerHTML = `
+        <span style="font-size:22px">${running ? '🟢' : '🔴'}</span>
+        <strong style="color:${running ? '#43e97b' : '#f5576c'}; margin-left:10px">
+            ${running ? 'Simulation is RUNNING' : 'Simulation is STOPPED'}
+        </strong>
+        <span style="color:#8892a4; margin-left:16px; font-size:13px">
+            — Metrics update every 5 seconds when running
+        </span>`;
+    updateSimStatus();
+}
+
+// =============================================================================
+// MONITORING VIEW — Decision + Request Logs
+// =============================================================================
+
+let currentLogPage = 0;
+
+function switchLogTab(tab) {
+    document.getElementById('log-decisions').style.display = tab === 'decisions' ? '' : 'none';
+    document.getElementById('log-requests').style.display  = tab === 'requests'  ? '' : 'none';
+    document.getElementById('tab-decisions').className = 'log-tab' + (tab === 'decisions' ? ' active' : '');
+    document.getElementById('tab-requests').className  = 'log-tab' + (tab === 'requests'  ? ' active' : '');
+    if (tab === 'decisions') loadDecisionLogs(0);
+    else loadRequestLogs(0);
+}
+
+async function loadDecisionLogs(page = 0) {
+    currentLogPage = page;
+    const wrap = document.getElementById('decision-log-wrap');
+    wrap.innerHTML = '<div class="loading-spinner">Loading logs...</div>';
+
+    const data = await apiFetch(`/api/monitoring/decisions?page=${page}&size=10&sort=decisionTimestamp,desc`);
+    if (!data?.data?.content) {
+        wrap.innerHTML = '<p class="empty-state">No routing decisions yet. Route a request first!</p>';
+        return;
+    }
+
+    const logs = data.data.content;
+    const total = data.data.totalPages || 1;
+
+    wrap.innerHTML = `
+        <table class="log-table">
+            <thead>
+                <tr><th>#</th><th>Time</th><th>Selected Server</th><th>Score</th><th>Algorithm</th><th>Servers Evaluated</th><th>Eval Time</th></tr>
+            </thead>
+            <tbody>
+                ${logs.map((l, i) => `
+                <tr>
+                    <td style="color:#8892a4">${page*10 + i + 1}</td>
+                    <td style="font-size:12px;color:#8892a4">${new Date(l.decisionTimestamp).toLocaleString()}</td>
+                    <td><strong>${escHtml(l.selectedServer?.name || 'Unknown')}</strong></td>
+                    <td><span style="color:#43e97b;font-weight:600">${(l.winningScore||0).toFixed(2)}</span></td>
+                    <td style="font-size:12px">${escHtml(l.algorithm||'FUZZY')}</td>
+                    <td style="text-align:center">${l.serversEvaluated||0}</td>
+                    <td style="font-size:12px">${(l.evaluationTimeMs||0).toFixed(1)}ms</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>`;
+
+    renderPagination('decision-pagination', page, total, loadDecisionLogs);
+}
+
+async function loadRequestLogs(page = 0) {
+    const wrap = document.getElementById('request-log-wrap');
+    wrap.innerHTML = '<div class="loading-spinner">Loading logs...</div>';
+
+    const data = await apiFetch(`/api/monitoring/requests?page=${page}&size=10&sort=requestTimestamp,desc`);
+    if (!data?.data?.content) {
+        wrap.innerHTML = '<p class="empty-state">No request logs yet.</p>';
+        return;
+    }
+
+    const logs = data.data.content;
+    const total = data.data.totalPages || 1;
+
+    wrap.innerHTML = `
+        <table class="log-table">
+            <thead>
+                <tr><th>#</th><th>Time</th><th>Path</th><th>Method</th><th>Server</th><th>Status</th><th>Resp Time</th><th>Success</th></tr>
+            </thead>
+            <tbody>
+                ${logs.map((l, i) => `
+                <tr>
+                    <td style="color:#8892a4">${page*10 + i + 1}</td>
+                    <td style="font-size:12px;color:#8892a4">${new Date(l.requestTimestamp).toLocaleString()}</td>
+                    <td style="font-size:12px">${escHtml(l.requestPath||'/')}</td>
+                    <td style="font-size:12px">${escHtml(l.httpMethod||'POST')}</td>
+                    <td><strong>${escHtml(l.handledByServer?.name||'Unknown')}</strong></td>
+                    <td>${l.statusCode||200}</td>
+                    <td>${(l.responseTimeMs||0).toFixed(0)}ms</td>
+                    <td>${l.success ? '✅' : '❌'}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>`;
+
+    renderPagination('request-pagination', page, total, loadRequestLogs);
+}
+
+function renderPagination(containerId, currentPage, totalPages, loadFn) {
+    const el = document.getElementById(containerId);
+    if (totalPages <= 1) { el.innerHTML = ''; return; }
+    let html = `<span class="page-info">Page ${currentPage+1} of ${totalPages}</span>`;
+    if (currentPage > 0) html += `<button class="page-btn" onclick="${loadFn.name}(${currentPage-1})">← Prev</button>`;
+    if (currentPage < totalPages - 1) html += `<button class="page-btn" onclick="${loadFn.name}(${currentPage+1})">Next →</button>`;
+    el.innerHTML = html;
 }

@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -74,31 +75,37 @@ public class DashboardController {
         long unhealthyServers = serverRepository.countByHealthStatus(Server.HealthStatus.UNHEALTHY);
         long offlineServers = serverRepository.countByHealthStatus(Server.HealthStatus.OFFLINE);
 
-        // ----- Load distribution -----
+        // ----- Load distribution — include ALL servers, even those with 0 decisions -----
         List<Object[]> selectionData = decisionLogRepository.findSelectionCountPerServer();
+        long totalDecisions = decisionLogRepository.count();
 
-        List<DashboardSummary.ServerSelectionCount> selectionCounts = new ArrayList<>();
-        Map<String, Double> loadDistribution = new HashMap<>();
+        // Build lookup map: serverName → decision count
+        Map<String, Long> selectionCountMap = new HashMap<>();
         String mostSelectedServer = null;
         long mostSelectedCount = 0;
-
         for (Object[] row : selectionData) {
-            String serverName = (String) row[0];
+            String srvName = (String) row[0];
             Long count = (Long) row[1];
-            double percentage = totalRequests > 0 ? (count * 100.0 / totalRequests) : 0.0;
-
-            selectionCounts.add(DashboardSummary.ServerSelectionCount.builder()
-                .serverName(serverName)
-                .selectionCount(count)
-                .percentage(Math.round(percentage * 10.0) / 10.0)
-                .build());
-
-            loadDistribution.put(serverName, Math.round(percentage * 10.0) / 10.0);
-
+            selectionCountMap.put(srvName, count);
             if (count > mostSelectedCount) {
                 mostSelectedCount = count;
-                mostSelectedServer = serverName;
+                mostSelectedServer = srvName;
             }
+        }
+
+        // Merge with ALL registered servers so new servers show 0%
+        List<DashboardSummary.ServerSelectionCount> selectionCounts = new ArrayList<>();
+        Map<String, Double> loadDistribution = new LinkedHashMap<>();
+        for (Server server : serverRepository.findAll()) {
+            long count = selectionCountMap.getOrDefault(server.getName(), 0L);
+            double percentage = totalDecisions > 0 ? (count * 100.0 / totalDecisions) : 0.0;
+            double roundedPct = Math.round(percentage * 10.0) / 10.0;
+            selectionCounts.add(DashboardSummary.ServerSelectionCount.builder()
+                .serverName(server.getName())
+                .selectionCount(count)
+                .percentage(roundedPct)
+                .build());
+            loadDistribution.put(server.getName(), roundedPct);
         }
 
         DashboardSummary summary = DashboardSummary.builder()
@@ -131,15 +138,20 @@ public class DashboardController {
     @GetMapping("/distribution")
     @Operation(summary = "Get load distribution", description = "Returns request routing percentage per server")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getDistribution() {
-        List<Object[]> data = decisionLogRepository.findSelectionCountPerServer();
         long total = decisionLogRepository.count();
 
-        Map<String, Object> result = new HashMap<>();
-        for (Object[] row : data) {
-            String name = (String) row[0];
-            long count = (Long) row[1];
+        // Build lookup from decision logs
+        Map<String, Long> countMap = new HashMap<>();
+        for (Object[] row : decisionLogRepository.findSelectionCountPerServer()) {
+            countMap.put((String) row[0], (Long) row[1]);
+        }
+
+        // Include ALL servers — new servers show 0% until traffic reaches them
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Server server : serverRepository.findAll()) {
+            long count = countMap.getOrDefault(server.getName(), 0L);
             double pct = total > 0 ? Math.round((count * 100.0 / total) * 10.0) / 10.0 : 0.0;
-            result.put(name, Map.of("count", count, "percentage", pct));
+            result.put(server.getName(), Map.of("count", count, "percentage", pct));
         }
 
         return ResponseEntity.ok(ApiResponse.success(result, "Load distribution retrieved"));
