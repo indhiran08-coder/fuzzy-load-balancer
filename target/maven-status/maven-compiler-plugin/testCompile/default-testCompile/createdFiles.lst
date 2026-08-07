@@ -1,0 +1,3 @@
+com\fuzzybalancer\AuthIntegrationTest.class
+com\fuzzybalancer\fuzzy\FuzzyRuleEngineTest.class
+com\fuzzybalancer\fuzzy\MembershipFunctionTest.class
